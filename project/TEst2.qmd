@@ -1,0 +1,142 @@
+---
+title: "UNICEF Inflation & GDP Analysis"
+author: "Raghav Gilra"
+date: "4/22/2024"
+format: 
+  html:
+    self-contained: true
+editor: visual
+---
+
+# Loading Required Libraries:
+
+```{r, warning=FALSE, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(leaflet)
+```
+
+# Introduction:
+
+In this analysis, a number of insights are generated and the dataset is analyzed. The top 10 countries are obtained based on the highest proportion of having limited drinking water, relationship between inflation and GDP per capita is explored, annual inflation on average by year is plotted and finally a map is obtained to show the inflation on average country wise.
+
+# Data Analysis:
+
+## Top 10 Countries By Highest Proportion of Limited Drinking Water:
+
+The bar chart attached below shows that the country with highest limited drinking water proportion is Libyan Arab Jamahiriya, followed by Syrian Arab Republic and Panama.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+data <- read.csv("unicef_indicator_1.csv")
+data2 <- read.csv("unicef_metadata.csv")
+
+master <- data %>% inner_join(data2, by = "country")
+
+countryWise <- master %>%
+  group_by(indicator, country) %>%
+  summarise(Avg_Value = round(mean(obs_value, na.rm = T), 2)) %>%
+  arrange(-Avg_Value) %>%
+  head(10)
+
+# Create the bar chart
+ggplot(countryWise, aes(x = country, 
+                        y = Avg_Value, 
+                        fill = country)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = Avg_Value),
+            vjust = 1.0, color = "white", size = 3) +
+  labs(title = "Top 10 Countries By Highest Proportion of Limited Drinking Water", 
+       x = "Country",
+       y = "Avg. Proportion of Limited Drinking Water") +
+  guides(fill = FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Inflation vs GDP Per Capita:
+
+The scatter plot attached below shows a negative relationship between population and GDP per capita. This means that increase in population reduces the GDP while decrease in population increases the GDP. The relationship strength is however weak in this case.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+# Create the scatter plot with regression line
+ggplot(master, aes(x = Population..total, 
+                   y = GDP.per.capita..constant.2015.US..)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Relationship Between GDP & Population",
+       x = "Population", 
+       y = "GDP Per Capita")+
+  theme_minimal()
+```
+
+## Average Inflation Consumer Prices Annual By Year:
+
+The line chart attached below shows that the average inflation started increasing from 1986 till 1990 with 1990 being the highest inflation. In 1991 it dropped down again but started rising again till 1994. This shows that in terms of average inflation consumer prices, the period of 1989-1995 was critical and the inflation was highest.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+Inflation_Year <- master %>%
+  group_by(year) %>%
+  summarise(Inflation = mean(Inflation..consumer.prices..annual...,
+                             na.rm = T))
+
+# Line chart with markers
+ggplot(Inflation_Year, aes(x = year, y = Inflation, group = 1)) +
+  geom_line(lwd = 1, color = "steel blue") +
+  geom_point(color = "sky blue", size = 2) + 
+  labs(title = "Average Inflation Over Time", 
+       x = "Year", 
+       y = "Avg. Inflation") +
+  theme_minimal()
+```
+
+## Inflation Consumer Prices Annual By Country:
+
+The map attached below shows that the average inflation consumer prices annual is highest for Peru with Peru, Belarus and Moldova with values of 211.49, 173.49 and 111.51 respectively.
+
+```{r, warning=FALSE, message=FALSE}
+# Calculate mean inflation by country
+country_inflation <- master %>%
+  group_by(alpha_3_code.x) %>%
+  summarise(mean_inflation = mean(Inflation..consumer.prices..annual..., na.rm = TRUE))
+names(country_inflation)[1] <- "ISO3_CODE"
+
+# Load country polygons and extract centroids
+final <- giscoR::gisco_get_countries() %>% 
+  st_centroid() %>%
+  inner_join(country_inflation, by = "ISO3_CODE") %>%
+  mutate(latitude = st_coordinates(.)[, 2],
+         longitude = st_coordinates(.)[, 1])
+
+# Define a function to scale the radius based on inflation
+scale_radius <- function(x) {
+  min_radius <- 3
+  max_radius <- 15
+  scaled_values <- scales::rescale(x, to = c(min_radius, max_radius))
+  return(scaled_values)
+}
+
+# Create a leaflet map
+leaflet(final) %>%
+  addTiles() %>%
+  setView(lng = 0, lat = 30, zoom = 2) %>% 
+  addCircleMarkers(
+    lng = ~longitude,  
+    lat = ~latitude,
+    radius = ~scale_radius(mean_inflation),
+    popup = ~paste(NAME_ENGL, "<br>", "Inflation:", round(mean_inflation, 2)),
+    label = ~NAME_ENGL,
+    color = ~ISO3_CODE,
+    fillOpacity = 0.8
+  )
+
+```
+
+
+# Conclusion:
+
+The analysis reveals that Libyan Arab Jamahiriya has the highest proportion of limited drinking water, followed by Syrian Arab Republic and Panama. A negative relationship between population and GDP per capita is observed, indicating that an increase in population tends to decrease GDP per capita, although the relationship strength appears weak. The period from 1989 to 1995 witnessed a significant rise in average inflation consumer prices, with the highest inflation occurring in 1990 followed by a decrease in 1991 and subsequent increase until 1994. Peru exhibits the highest average inflation consumer prices annually, followed by Belarus and Moldova, with values of 211.49, 173.49, and 111.51 respectively.
+
+---
+
+## 
